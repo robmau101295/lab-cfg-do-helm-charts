@@ -1,0 +1,72 @@
+# Valores por defecto del chart. Los reales llegan desde el repo GitOps
+# (global.yaml, <app>/shared.yaml, <app>/<env>/app.yaml, ...), que los pisan.
+
+# Ambiente (dev, qa, prod). Se expone a la app como APP_ENVIRONMENT.
+environment: ""
+
+container:
+  image:
+    # Registro ECR, ej. 123456789012.dkr.ecr.us-east-1.amazonaws.com (va en global.yaml)
+    registry: ""
+    # Nombre del repo ECR. Vacío = nombre de la Application (releaseName).
+    repository: ""
+    # Tag de la imagen. Lo escribe el CD en <app>/<env>/app.yaml. Obligatorio.
+    tag: ""
+    pullPolicy: IfNotPresent
+  port: 8080
+
+replicaCount: 1
+
+# Variables de entorno NO secretas (van a un ConfigMap).
+envvars: {}
+
+# Secretos desde AWS Secrets Manager a través de External Secrets.
+secrets:
+  enabled: false
+  # SecretStore del namespace (lo crea lab-iac-do-k8s-<dom>-secrets).
+  secretStoreName: ""
+  # Nombre del secreto en Secrets Manager, ej. eks-lab-dev-r1-demo-app/secrets
+  remoteKey: ""
+  refreshInterval: 1m
+
+service:
+  # ClusterIP = solo dentro del clúster (port-forward para probar).
+  # LoadBalancer = AWS crea un Load Balancer público (en las subnets con la
+  # etiqueta kubernetes.io/role/elb que puso vpc.tf).
+  type: ClusterIP
+  port: 80
+  # Solo para LoadBalancer: quién puede entrar (ej. ["181.39.10.20/32"]).
+  loadBalancerSourceRanges: []
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+probes:
+  # livenessProbe: ¿el proceso vive? Si falla, Kubernetes REINICIA el contenedor.
+  path: /health
+  # readinessProbe: ¿puede atender? Si falla, el pod sale del Service (no le
+  # llega tráfico) pero NO se reinicia. Vacío = usa probes.path.
+  readinessPath: ""
+
+# Segundos de espera antes de que el contenedor reciba SIGTERM. Da tiempo a
+# que el Service y el Load Balancer dejen de mandarle tráfico (ver Fase 7,
+# upgrade del clúster: los nodos se drenan y los pods se mueven).
+preStopSleepSeconds: 5
+
+# PodDisruptionBudget: cuántos pods deben seguir vivos durante una
+# interrupción VOLUNTARIA (drenar un nodo en un upgrade). Solo tiene sentido
+# con replicaCount >= 2.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Reparte las réplicas en nodos distintos (si se puede). Así, al drenar un
+# nodo, la otra réplica sigue atendiendo.
+spreadAcrossNodes: true
+
+nodeSelector: {}

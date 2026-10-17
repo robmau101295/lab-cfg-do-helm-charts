@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "microservice.name" . }}
+  labels:
+    {{- include "microservice.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "microservice.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "microservice.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Si cambian las variables (ConfigMap), cambia este hash y los pods se
+        # reinician solos para tomar los valores nuevos.
+        checksum/envvars: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      # ServiceAccount con el mismo nombre de la app: lo crea Terraform
+      # (lab-iac-do-k8s-demo) con el rol IAM (IRSA). El chart NO lo crea.
+      serviceAccountName: {{ include "microservice.name" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.spreadAcrossNodes }}
+      # "ScheduleAnyway": intenta poner cada réplica en un nodo distinto, pero
+      # si no hay nodos suficientes igual las programa (no se queda Pending).
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "microservice.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      containers:
+        - name: app
+          image: {{ include "microservice.image" . }}
+          imagePullPolicy: {{ .Values.container.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.container.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "microservice.name" . }}-envvars
+            {{- if .Values.secrets.enabled }}
+            - secretRef:
+                name: {{ include "microservice.name" . }}-secrets
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ default .Values.probes.path .Values.probes.readinessPath }}
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- if gt (int .Values.preStopSleepSeconds) 0 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "{{ .Values.preStopSleepSeconds }}"]
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

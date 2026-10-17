@@ -1,0 +1,16 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+# Durante un "drain" (por ejemplo, el upgrade de los nodos del clúster),
+# Kubernetes NO desaloja un pod si eso deja menos de minAvailable pods listos.
+# El drain espera a que la réplica nueva esté Ready en otro nodo.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "microservice.name" . }}
+  labels:
+    {{- include "microservice.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "microservice.selectorLabels" . | nindent 6 }}
+{{- end }}

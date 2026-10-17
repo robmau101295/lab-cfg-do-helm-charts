@@ -1,0 +1,2 @@
+{{ include "microservice.name" . }} desplegado con la imagen {{ include "microservice.image" . }}
+Prueba: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "microservice.name" . }} 8080:{{ .Values.service.port }}
